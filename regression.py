@@ -1,12 +1,16 @@
 import glob
 import re
+import timeit
+
+from concurrent.futures import ThreadPoolExecutor
 
 from pynpi import waveform
 
 class Regression:
-    def __init__(self,regression_path, use_gz=False, max_fsdbs=5000, half_clock=50):
+    def __init__(self,regression_path, use_gz=False, max_fsdbs=5000, half_clock=50, num_threads=1):
         self.regression_path = regression_path
         self.use_gz = use_gz
+        self.num_threads = num_threads
                 
         # signals_per_test[fsdb] = [signal-name:[values]]
         self.signals_per_test = {}
@@ -46,9 +50,20 @@ class Regression:
             return
         
         fsdbs_to_open = min(len(self.fsdbs)-1, self.max_fsdbs)
+
+        start_time = timeit.default_timer()
         
-        for fsdb in self.fsdbs[:fsdbs_to_open]:
-            self.extract_test_data(fsdb)
+        if self.num_threads == 1:
+             for fsdb in self.fsdbs[:fsdbs_to_open]:
+                self.extract_test_data(fsdb)
+        else:
+            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                for fsdb in self.fsdbs[:fsdbs_to_open]:
+                    future = executor.submit(self.extract_test_data, fsdb)
+        
+        duration = timeit.default_timer() - start_time
+        print("Took ", duration, " to extract data")
+                
         
     def get_coverage_signals(self,covers):
         for cover in covers:
@@ -59,6 +74,8 @@ class Regression:
 
     def extract_test_data(self, wave_location):
         wave = waveform.open(wave_location)
+        
+        print("extracting data for ", wave_location)
 
         if not wave:
             print("Error. Failed to open file: ", wave_location)
@@ -72,9 +89,11 @@ class Regression:
     
         for signal in self.signal_names:
             signal_object = wave.sig_by_name(signal)
-            self.signals_per_test[wave_location][signal] = waveform.sig_hdl_value_between(signal_object,0,max_time,waveform.VctFormat_e.DecStrVal)
+            self.signals_per_test[wave_location][signal] =waveform.sig_hdl_value_between(signal_object,0,max_time,waveform.VctFormat_e.DecStrVal)
 
         waveform.close(wave)
+        
+        print("finished extracting ", wave_location)
     
     # cover : Cover // should be list of Cover
     # cover_results[signal_name][relative_time][value] = {covered:True/False, by:[{test:"", at_time:0}]}
@@ -121,3 +140,4 @@ class Regression:
                 matching_sigs.append(sig.full_name())
             
         return matching_sigs
+
