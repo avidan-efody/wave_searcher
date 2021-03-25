@@ -110,10 +110,15 @@ class Regression:
             print("****** starting test: *******" + test)
             for event_value_change in dataset[search_query[0][0]]:
                 if event_value_change[1] == str(search_query[0][1]):
-                    #print("initial condition matched by test: " + test + " at time: " + str(event_value_change[0]))
                     match = True
                     for idx,term in enumerate(search_query[1:]):
-                        signal_value = self.get_value_at(dataset, term[0], event_value_change[0] + self.half_clock, term[2])
+                        signal_value = ''
+                        if (isinstance(term[2],int)):
+                            signal_value = self.get_value_at(dataset, term[0], event_value_change[0] + self.half_clock, term[2])
+                            
+                        if (isinstance(term[2],range)):
+                            signal_value = self.get_value_over_range(dataset, term[0], event_value_change[0] + self.half_clock, term[2])
+                            
                         if (signal_value != str(term[1])):
                             match = False
                             break
@@ -124,10 +129,22 @@ class Regression:
                         print("search criteria matched at time: ", str(event_value_change[0]))
                         return
 
+    # return a value at a given point in time
     def get_value_at(self, dataset, rtl_path, event_time, sample_cycle):
         item_value_changes = dataset[rtl_path]
         last_change_b4_time = next(value_change for value_change in reversed(item_value_changes) if (value_change[0] < event_time + sample_cycle*self.clock))
         return last_change_b4_time[1]
+    
+    # returns a value only if it is the only value over the range specified
+    def get_value_over_range(self, dataset, rtl_path, event_time, sample_range):
+        item_value_changes = dataset[rtl_path]
+        last_change_b4_range_start = next(value_change for value_change in reversed(item_value_changes) if (value_change[0] < event_time + sample_range.start*self.clock))
+        last_change_b4_range_end = next(value_change for value_change in reversed(item_value_changes) if (value_change[0] < event_time + sample_range.stop*self.clock))
+        if (last_change_b4_range_start[0] == last_change_b4_range_end[0]):
+            return last_change_b4_range_start[1]
+        else:
+            return ''
+        
                         
     def get_matching_sigs(self, fsdb, scope_name, sig_match_strings):
         scope = fsdb.scope_by_name(scope_name)
