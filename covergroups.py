@@ -97,7 +97,7 @@ class Cross(CoverBase):
                 bucket_values = []
                 for sample_cycle in item.buckets:
                     value = self.get_value_at(dataset, item.signal.rtl_path, event_time, sample_cycle)
-                    bucket_values.append((sample_cycle, (value == 1)))
+                    bucket_values.append((sample_cycle, (value == str(1))))
                 cross_items_bucket_values.append(bucket_values)
 
         for cross_bucket_value in list(itertools.product(*cross_items_bucket_values)):
