@@ -102,7 +102,7 @@ class Regression:
             for cover in covers:
                 for event_value_change in dataset[cover.event.signal.rtl_path]:
                     if event_value_change[1] in cover.event.values:
-                        cover.sample_cover(dataset, event_value_change[0])
+                        cover.sample(dataset, event_value_change[0])
                         
 
     def search(self, search_query):

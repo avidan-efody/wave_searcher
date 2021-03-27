@@ -1,4 +1,11 @@
 import itertools
+from enum import Enum
+import pandas as pd
+
+
+class BucketType(Enum):
+    value = 1
+    time = 2
 
 class Signal:
     def __init__(self, rtl_path, logical_name=""):
@@ -16,23 +23,92 @@ class Event:
     def __init__(self, signal, values):
         self.signal = signal
         self.values = [str(v) for v in values]
+
+
+class CoverBase:
+    def __init__(self):
+        pass
+
+    def get_value_at(self, dataset, rtl_path, event_time, sample_cycle):
+        item_value_changes = dataset[rtl_path]
+        last_change_b4_time = next(value_change for value_change in reversed(item_value_changes) if (value_change[0] < event_time + sample_cycle*100))
+        return last_change_b4_time[1]
         
-class CoverItem:
+class CoverItem(CoverBase):
     # signal : Signal
     # sample_cycles : cycles from event
-    def __init__(self, signal, sample_cycles, buckets):
+    def __init__(self, signal, buckets, buckets_type=BucketType.value):
         self.signal = signal
-        self.sample_cycles = sample_cycles
         self.buckets = buckets
-        
-    def buckets_at_sample_cycle(self):
-        result = []
-        
+        self.buckets_type = buckets_type
+
+        self.create_empty()
+
+    def create_empty(self):
+        item_table = []
+
         for bucket in self.buckets:
-            for sample_cycle in self.sample_cycles:
-                result.append(str(bucket) + '@' + str(sample_cycle))
-                
-        return result
+            item_table.append([bucket, False])
+
+        self.item_df = pd.DataFrame(item_table)
+        self.item_df.columns = [self.signal.logical_name, 'covered']
+
+    def sample(self, dataset, event_time):
+        if self.buckets_type == BucketType.time:
+            for sample_cycle in self.buckets:
+                value = self.get_value_at(dataset, self.signal.rtl_path, event_time, sample_cycle)
+                if value == str(1):
+                    self.item_df.loc[self.item_df[self.signal.logical_name]==sample_cycle, [
+                        'covered']] = True
+
+class Cross(CoverBase):
+    def __init__(self, items):
+        self.items = items
+        self.name = '_X_'.join([item.signal.logical_name for item in items])
+        self.create_empty()
+
+    def create_empty(self):
+
+        self.cross_item_table = []
+
+        cross_item_table_header = [item.signal.logical_name for item in self.items]
+        cross_item_table_header.append('covered')
+
+        self.cross_item_table.append(cross_item_table_header)
+            
+        cross_items_buckets = []    
+        for item in self.items:
+            cross_items_buckets.append(item.buckets)
+            
+        for cross_bucket in list(itertools.product(*cross_items_buckets)):
+            #cross_bucket_name = ','.join(cross_bucket)
+            cross_item_table_row = [bucket for bucket in cross_bucket]
+            cross_item_table_row.append(False)
+
+            self.cross_item_table.append(cross_item_table_row)
+
+    def sample(self, dataset, event_time):
+
+        cross_item_table = [];
+
+        cross_items_bucket_values = []
+        for item in self.items:
+            if item.buckets_type == BucketType.time:
+                bucket_values = []
+                for sample_cycle in item.buckets:
+                    value = self.get_value_at(dataset, item.signal.rtl_path, event_time, sample_cycle)
+                    bucket_values.append((sample_cycle, (value == 1)))
+                cross_items_bucket_values.append(bucket_values)
+
+        for cross_bucket_value in list(itertools.product(*cross_items_bucket_values)):
+            if all([hit[1] for hit in cross_bucket_value]):
+                cross_item_table_row = [hit[0] for hit in cross_bucket_value]
+                cross_item_table_row.append(True)
+
+                cross_item_table.append(cross_item_table_row)
+
+        if len(cross_item_table) > 0:
+            self.cross_item_table.extend(cross_item_table)
     
 class Cover:
     # event: Event
@@ -43,44 +119,14 @@ class Cover:
         self.items = items
         self.crosses = crosses
         
-        self.cross_items_buckets = []
-        self.create_empty();
-        
-        
-    # bucket name for cross: mispredict_X_snoop[1@(-2),1@(0)]
-    def create_empty(self):
-        self.cover_hash = {}
-        
+       
+    def sample(self, dataset, event_time):
         for item in self.items:
-            self.cover_hash[item.signal.logical_name] = {}
-            for sample_cycle in item.sample_cycles:
-                self.cover_hash[item.signal.logical_name][sample_cycle] = {}
-                for bucket in item.buckets:
-                    self.cover_hash[item.signal.logical_name][sample_cycle][bucket] = False
-                    
+            item.sample(dataset, event_time)
+
         for cross in self.crosses:
-            cover_name = '_X_'.join([item.signal.logical_name for item in cross])
-            self.cover_hash[cover_name] = {}
-            for item in cross:
-                self.cross_items_buckets.append(item.buckets_at_sample_cycle())
-            
-            for cross_bucket in list(itertools.product(*self.cross_items_buckets)):
-                cross_bucket_name = ','.join(cross_bucket)
-                self.cover_hash[cover_name][cross_bucket_name] = False            
-                
-    def sample_cover(self, dataset, event_time):
-        for item in self.items:
-            for sample_cycle in item.sample_cycles:
-                value = self.get_value_at(dataset, item.signal.rtl_path, event_time, sample_cycle)
-                for bucket in item.buckets:
-                    if value in bucket:
-                        self.cover_hash[item.signal.logical_name][sample_cycle][bucket] = True
-                
-    def get_value_at(self, dataset, rtl_path, event_time, sample_cycle):
-        item_value_changes = dataset[rtl_path]
-        last_change_b4_time = next(value_change for value_change in reversed(item_value_changes) if (value_change[0] < event_time + sample_cycle*100))
-        return last_change_b4_time[1]
-    
+            cross.sample(dataset, event_time)
+                    
     def get_signals(self):
         signal_names = [event.signal.rtl_path]
         for item in self.items:
@@ -89,4 +135,8 @@ class Cover:
         return signal_names
     
     def print(self):
-        print(self.cover_hash)
+        for item in self.items:
+            print(item.item_df)
+        for cross in self.crosses:
+            df = pd.DataFrame(cross.cross_item_table)
+            print(df)
