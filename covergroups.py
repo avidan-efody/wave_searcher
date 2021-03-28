@@ -69,12 +69,10 @@ class Cross(CoverBase):
 
     def create_empty(self):
 
-        self.cross_item_table = []
+        cross_item_table = []
 
         cross_item_table_header = [item.signal.logical_name for item in self.items]
         cross_item_table_header.append('covered')
-
-        self.cross_item_table.append(cross_item_table_header)
             
         cross_items_buckets = []    
         for item in self.items:
@@ -85,7 +83,10 @@ class Cross(CoverBase):
             cross_item_table_row = [bucket for bucket in cross_bucket]
             cross_item_table_row.append(False)
 
-            self.cross_item_table.append(cross_item_table_row)
+            cross_item_table.append(cross_item_table_row)
+
+        self.cross_item_df = pd.DataFrame(cross_item_table)
+        self.cross_item_df.columns = cross_item_table_header
 
     def sample(self, dataset, event_time):
 
@@ -97,18 +98,26 @@ class Cross(CoverBase):
                 bucket_values = []
                 for sample_cycle in item.buckets:
                     value = self.get_value_at(dataset, item.signal.rtl_path, event_time, sample_cycle)
-                    bucket_values.append((sample_cycle, (value == str(1))))
+                    bucket_values.append((item.signal.logical_name, sample_cycle, (value == str(1))))
                 cross_items_bucket_values.append(bucket_values)
 
         for cross_bucket_value in list(itertools.product(*cross_items_bucket_values)):
-            if all([hit[1] for hit in cross_bucket_value]):
-                cross_item_table_row = [hit[0] for hit in cross_bucket_value]
-                cross_item_table_row.append(True)
-
-                cross_item_table.append(cross_item_table_row)
+            if all([hit[2] for hit in cross_bucket_value]):
+                print("found a hit: ", cross_bucket_value)
+                for index,row in self.cross_item_df.iterrows():
+                    if self.is_row_matching_values(row, cross_bucket_value):
+                        self.cross_item_df.loc[index, 'covered'] = True;
 
         if len(cross_item_table) > 0:
             self.cross_item_table.extend(cross_item_table)
+
+    def is_row_matching_values(self, df_row, row_values):
+        match = True
+        for value in row_values:
+            if df_row[value[0]] != value[1]:
+                match = False
+
+        return match
     
 class Cover:
     # event: Event
@@ -138,5 +147,4 @@ class Cover:
         for item in self.items:
             print(item.item_df)
         for cross in self.crosses:
-            df = pd.DataFrame(cross.cross_item_table)
-            print(df)
+            print(cross.cross_item_df)
