@@ -1,6 +1,7 @@
 import itertools
 from enum import Enum
 import pandas as pd
+from pivottablejs import pivot_ui
 
 
 class BucketType(Enum):
@@ -148,3 +149,9 @@ class Cover:
             print(item.item_df)
         for cross in self.crosses:
             print(cross.cross_item_df)
+
+    def pivot(self):
+        for item in self.items:
+            pivot_ui(item.item_df)
+        for cross in self.crosses:
+            pivot_ui(cross.cross_item_df)
