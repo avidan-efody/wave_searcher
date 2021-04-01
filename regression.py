@@ -6,6 +6,23 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pynpi import waveform
 
+class SignalGroup:
+    def __init__(self, scope, match_strings):
+        self.scope = scope
+        self.match_strings = match_strings
+
+    def get_matching_sigs(self, fsdb):
+        scope = fsdb.scope_by_name(self.scope)
+        regex = re.compile('|'.join(self.match_strings))
+    
+        matching_sigs = []
+    
+        for sig in scope.sig_list():
+            if regex.match(sig.full_name()):
+                matching_sigs.append(sig.full_name())
+            
+        return matching_sigs
+
 class Regression:
     def __init__(self,regression_path, use_gz=False, max_fsdbs=5000, half_clock=50, num_threads=1):
         self.regression_path = regression_path
@@ -36,15 +53,18 @@ class Regression:
     
     # covers : list of Cover
     # Gets signal paths for events and items and extracts them from entire regression
-    def extract_data(self, signal_names=[], scope_name='', sig_match_strings=[]):
+    def extract_data(self, signal_names=[], signal_groups=[]):
         if (len(self.signal_names) == 0): 
             self.signal_names = signal_names
             
-        if ((scope_name != '') and (len(sig_match_strings) > 0)):
+        if (len(signal_groups) > 0):
             if (len(self.fsdbs) > 0):
                 wave = waveform.open(self.fsdbs[0])
-                self.signal_names.extend(self.get_matching_sigs(wave, scope_name, sig_match_strings))
+                for signal_group in signal_groups:
+                    self.signal_names.extend(signal_group.get_matching_sigs(wave))
+                waveform.close(wave)
             
+
         if (len(signal_names) == 0):
             print("No matching signals to extract found");
             return
@@ -54,7 +74,8 @@ class Regression:
         start_time = timeit.default_timer()
         
         if self.num_threads == 1:
-             for fsdb in self.fsdbs[:fsdbs_to_open]:
+             for i, fsdb in enumerate(self.fsdbs[:fsdbs_to_open]):
+                print("extracting data for ", fsdb, " test #", i, " out of: ", len(self.fsdbs))
                 self.extract_test_data(fsdb)
         else:
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
@@ -74,8 +95,6 @@ class Regression:
 
     def extract_test_data(self, wave_location):
         wave = waveform.open(wave_location)
-        
-        print("extracting data for ", wave_location)
 
         if not wave:
             print("Error. Failed to open file: ", wave_location)
@@ -145,16 +164,4 @@ class Regression:
         else:
             return ''
         
-                        
-    def get_matching_sigs(self, fsdb, scope_name, sig_match_strings):
-        scope = fsdb.scope_by_name(scope_name)
-        regex = re.compile('|'.join(sig_match_strings))
-    
-        matching_sigs = []
-    
-        for sig in scope.sig_list():
-            if regex.match(sig.full_name()):
-                matching_sigs.append(sig.full_name())
-            
-        return matching_sigs
 
