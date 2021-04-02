@@ -4,8 +4,6 @@ import timeit
 
 from concurrent.futures import ThreadPoolExecutor
 
-from pynpi import waveform
-
 class SignalGroup:
     def __init__(self, scope, match_strings):
         self.scope = scope
@@ -24,7 +22,7 @@ class SignalGroup:
         return matching_sigs
 
 class Regression:
-    def __init__(self,regression_path, use_gz=False, max_fsdbs=5000, half_clock=50, num_threads=1):
+    def __init__(self,regression_path, use_gz=False, max_wave_files=5000, half_clock=50, num_threads=1):
         self.regression_path = regression_path
         self.use_gz = use_gz
         self.num_threads = num_threads
@@ -34,57 +32,62 @@ class Regression:
         
         self.signal_names = []
         
-        self.fsdbs = []
+        self.wave_files = []
         
-        self.max_fsdbs = max_fsdbs
-        self.find_fsdbs()
+        self.max_wave_files = max_wave_files
+        self.vendor_find_wave_files()
         
         self.half_clock = half_clock
         self.clock = 2 * self.half_clock
         
         
-    def find_fsdbs(self):
-        glob_pattern = '*/*.fsdb.gz' if self.use_gz else '*/*.fsdb'
-        
-        for fsdb_path in glob.iglob(self.regression_path + glob_pattern): #
-            self.fsdbs.append(fsdb_path)
-            
-        print("found ", len(self.fsdbs), " fsdbs")
+    # This function should be extended by vendor specific implementations
+    def vendor_find_wave_files(self):
+        pass
     
     # covers : list of Cover
     # Gets signal paths for events and items and extracts them from entire regression
     def extract_data(self, signal_names=[], signal_groups=[]):
+        if not self.vendor_init():
+            print("vendor init failed")
+            return
+
         if (len(self.signal_names) == 0): 
             self.signal_names = signal_names
             
         if (len(signal_groups) > 0):
-            if (len(self.fsdbs) > 0):
-                wave = waveform.open(self.fsdbs[0])
-                for signal_group in signal_groups:
-                    self.signal_names.extend(signal_group.get_matching_sigs(wave))
-                waveform.close(wave)
-            
+            self.vendor_get_signals(signal_groups)
 
         if (len(signal_names) == 0):
             print("No matching signals to extract found");
             return
         
-        fsdbs_to_open = min(len(self.fsdbs)-1, self.max_fsdbs)
+        waves_to_open = min(len(self.wave_files)-1, self.max_wave_files)
 
         start_time = timeit.default_timer()
         
         if self.num_threads == 1:
-             for i, fsdb in enumerate(self.fsdbs[:fsdbs_to_open]):
-                print("extracting data for ", fsdb, " test #", i, " out of: ", len(self.fsdbs))
-                self.extract_test_data(fsdb)
+             for i, wave_file in enumerate(self.wave_files[:waves_to_open]):
+                print("extracting data for ", wave_file, " test #", i, " out of: ", len(self.wave_files))
+                self.vendor_extract_wave_data(wave_file)
         else:
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-                for fsdb in self.fsdbs[:fsdbs_to_open]:
-                    future = executor.submit(self.extract_test_data, fsdb)
+                for wave_file in self.wave_files[:waves_to_open]:
+                    future = executor.submit(self.vendor_extract_wave_data, wave_file)
         
         duration = timeit.default_timer() - start_time
         print("Took ", duration, " to extract data")
-                
+
+        self.vendor_close()
+
+    def vendor_init(self):
+        pass
+
+    def vendor_close(self):
+        pass
+
+    def vendor_extract_wave_data(self, wave_location):
+        pass
         
     def get_coverage_signals(self,covers):
         for cover in covers:
@@ -92,27 +95,6 @@ class Regression:
             for item in cover.items:
                 self.signal_names.append(item.signal.rtl_path)
         
-
-    def extract_test_data(self, wave_location):
-        wave = waveform.open(wave_location)
-
-        if not wave:
-            print("Error. Failed to open file: ", wave_location)
-            return
-       
-        max_time = wave.max_time();
-        
-        signals_objects = [];
-    
-        self.signals_per_test[wave_location] = {}
-    
-        for signal in self.signal_names:
-            signal_object = wave.sig_by_name(signal)
-            self.signals_per_test[wave_location][signal] =waveform.sig_hdl_value_between(signal_object,0,max_time,waveform.VctFormat_e.DecStrVal)
-
-        waveform.close(wave)
-        
-        print("finished extracting ", wave_location)
     
     # cover : Cover // should be list of Cover
     # cover_results[signal_name][relative_time][value] = {covered:True/False, by:[{test:"", at_time:0}]}

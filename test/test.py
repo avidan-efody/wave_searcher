@@ -1,4 +1,4 @@
-ffrom coverage.regression import Regression
+from coverage.regression import Regression
 from coverage.covergroups import *
 
 signals_per_test = {'/test1/verilog.fsdb': {
