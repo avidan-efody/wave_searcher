@@ -1,5 +1,6 @@
 import glob
 import re
+import os
 import timeit
 
 from concurrent.futures import ThreadPoolExecutor
@@ -22,7 +23,11 @@ class SignalGroup:
         return matching_sigs
 
 class Regression:
-    def __init__(self,regression_path, use_gz=False, max_wave_files=5000, half_clock=50, num_threads=1):
+    def __init__(self,regression_path=os.getcwd(), 
+                 use_gz=False, 
+                 max_wave_files=5000, 
+                 half_clock=50, 
+                 num_threads=1):
         self.regression_path = regression_path
         self.use_gz = use_gz
         self.num_threads = num_threads
@@ -41,10 +46,6 @@ class Regression:
         self.clock = 2 * self.half_clock
         
         
-    # This function should be extended by vendor specific implementations
-    def vendor_find_wave_files(self):
-        pass
-    
     # covers : list of Cover
     # Gets signal paths for events and items and extracts them from entire regression
     def extract_data(self, signal_names=[], signal_groups=[]):
@@ -62,7 +63,7 @@ class Regression:
             print("No matching signals to extract found");
             return
         
-        waves_to_open = min(len(self.wave_files)-1, self.max_wave_files)
+        waves_to_open = min(len(self.wave_files), self.max_wave_files)
 
         start_time = timeit.default_timer()
         
@@ -79,15 +80,6 @@ class Regression:
         print("Took ", duration, " to extract data")
 
         self.vendor_close()
-
-    def vendor_init(self):
-        pass
-
-    def vendor_close(self):
-        pass
-
-    def vendor_extract_wave_data(self, wave_location):
-        pass
         
     def get_coverage_signals(self,covers):
         for cover in covers:
@@ -147,3 +139,15 @@ class Regression:
             return ''
         
 
+    # These function are vendor specific
+    def vendor_find_wave_files(self):
+        pass
+
+    def vendor_extract_wave_data(self, wave_location):
+        pass
+
+    def vendor_init(self):
+        pass
+
+    def vendor_close(self):
+        pass

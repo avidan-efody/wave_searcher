@@ -1,5 +1,6 @@
 import glob
 import re
+import os
 import timeit
 
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +12,7 @@ from coverage.regression import Regression
 
 class SnpsRegression(Regression):
 
-    def __init__(self,regression_path, use_gz=False, max_wave_files=5000, half_clock=50, num_threads=1):
+    def __init__(self,regression_path=os.getcwd(), use_gz=False, max_wave_files=5000, half_clock=50, num_threads=1):
         super(SnpsRegression,self).__init__(regression_path, use_gz, max_wave_files, half_clock, num_threads)
 
     def vendor_find_wave_files(self):

@@ -1,0 +1,17 @@
+#!/bin/bash
+num_runs=1
+
+if [ ! -z "$1" ]
+then
+    num_runs=$1
+fi
+
+$VCS_HOME/bin/vlogan -full64 -sverilog rtl/top.v
+
+$VCS_HOME/bin/vcs -full64 -debug_access work.top
+
+for seed in $(seq 1 $num_runs)
+do
+    echo "running with seed $seed" 
+    ./simv -ucli -do dump.cmd +ntb_random_seed=$seed +fsdbfile+test$seed.fsdb
+done
