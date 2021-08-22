@@ -1,5 +1,5 @@
 #!/bin/bash
-num_runs=1
+num_runs=5
 
 if [ ! -z "$1" ]
 then
