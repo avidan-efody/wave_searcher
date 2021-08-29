@@ -12,6 +12,8 @@ Wave searcher is an open source solution that allows searching multiple wave fil
 
 Step #1 usually takes a bit of time (see below) because we're reading a lot of data from many files into memory. Once data has been read into memory, however, searching it is very fast: 1-2 seconds for 100's of wave files. Note that a possible alternative to keeping the data in memory would be to keep it in a database, but this is not implemented here.
 
+![](wave_searcher.png)
+
 ## Reading the data
 To search the data, it must first be read into memory. The time it takes to read the data depends on the number of signals you'd like to read, and the length of the test. Reading all inputs/outputs for a long (15-20 min) big cluster test, takes about 15 seconds. short tests take 1-2 seconds. 
 Since this step can take a bit of time if you have 100's of tests (half an hour to an hour), I have found it useful to read data that would be interesting to multiple users and then keep it in memory for a few days before refreshing. Multiple users could search the data via a small flask server.
